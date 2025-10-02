@@ -23,7 +23,6 @@ services:
     environment:
       - MODEL_PATH=/app/models/swin_model_weights.pth
       - DEVICE=cuda
-      - PATHOLOGY_THRESHOLD=0.9
     runtime: nvidia
     volumes:
       - ./ml-service/models:/app/models
