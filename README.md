@@ -123,6 +123,29 @@ RUN python3.10 -m pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cpu
 ```
 
+## Управление сервисами
+
+### Просмотр логов
+
+```bash
+# Логи конкретного сервиса
+docker-compose logs -f main-service
+docker-compose logs -f ml-service
+docker-compose logs -f thoraxai-database
+```
+
+### Диагностика проблем
+
+```bash
+# Проверка статуса контейнеров
+docker-compose ps
+
+# Полный перезапуск системы при ошибках
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
 ## Использование
 
 ### Веб-интерфейс
