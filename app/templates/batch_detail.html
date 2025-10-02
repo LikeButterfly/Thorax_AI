@@ -223,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function createStudyCardContent(study) {
         const statusBadge = getStatusBadge(study.processing_status);
         const pathologyBadge = getPathologyBadge(study.pathology);
-        const probability = study.probability_of_pathology ? `${(study.probability_of_pathology * 100).toFixed(1)}%` : 'N/A';
+        const probability = study.probability_of_pathology ? `${study.probability_of_pathology.toFixed(3)}` : 'N/A';
 
         return `
             <div class="col-lg-4 col-md-6 mb-4">

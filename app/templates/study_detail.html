@@ -256,7 +256,7 @@ async function loadStudyDetails(studyId) {
         document.getElementById('processingStatus').innerHTML = getStatusBadge(study.processing_status);
         document.getElementById('pathologyStatus').innerHTML = getPathologyBadge(study.pathology);
         document.getElementById('probabilityOfPathology').textContent =
-            study.probability_of_pathology ? `${(study.probability_of_pathology * 100).toFixed(1)}%` : 'N/A';
+            study.probability_of_pathology ? `${study.probability_of_pathology.toFixed(3)}` : 'N/A';
         document.getElementById('processingTime').textContent =
             study.processing_time ? `${study.processing_time.toFixed(2)}с` : 'N/A';
 
