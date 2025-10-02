@@ -1,0 +1,1 @@
+ml-service/models/swin_model_weights.pth filter=lfs diff=lfs merge=lfs -text
