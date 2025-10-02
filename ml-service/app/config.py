@@ -18,7 +18,6 @@ class Settings:
     DEVICE: str = os.getenv("DEVICE", "auto")  # auto, cpu, cuda
 
     # Настройки предсказания
-    PATHOLOGY_THRESHOLD: float = float(os.getenv("PATHOLOGY_THRESHOLD", "0.9"))
     BATCH_SIZE: int = int(os.getenv("BATCH_SIZE", "1"))
 
     # Настройки логирования

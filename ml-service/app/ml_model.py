@@ -66,11 +66,11 @@ class MLModelService:
             raise FileNotFoundError(f"Файл модели не найден: {model_path}")
 
         state_dict = torch.load(model_path, map_location=self.device)
-        self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict)  # type: ignore
 
         # Переводим в режим оценки
-        self.model.to(self.device)
-        self.model.eval()
+        self.model.to(self.device)  # type: ignore
+        self.model.eval()  # type: ignore
 
         # Настраиваем трансформации
         self.transform = transforms.Compose(
@@ -126,14 +126,12 @@ class MLModelService:
 
             # Извлекаем вероятность патологии
             pathology_probability = float(probs[1])  # Индекс 1 = "pathologies"
-            has_pathology = pathology_probability > settings.PATHOLOGY_THRESHOLD
 
             return {
                 "image_path": image_path,
                 "predicted_class": self.class_names[predicted_class],  # type: ignore
                 "pathology_probability": pathology_probability,
                 "normal_probability": float(probs[0]),
-                "has_pathology": has_pathology,
                 "probabilities": {"normal": float(probs[0]), "pathologies": float(probs[1])},  # type: ignore  # noqa E501
             }
 
@@ -163,7 +161,6 @@ class MLModelService:
                         "image_path": image_path,
                         "error": str(e),
                         "pathology_probability": 0.0,
-                        "has_pathology": False,
                     }
                 )
 
@@ -288,13 +285,3 @@ class MLModelService:
         except Exception as e:
             logger.error(f"Ошибка анализа исследования: {str(e)}")
             return {"error": str(e)}
-
-    def get_model_info(self) -> Dict[str, Any]:
-        """Возвращает информацию о модели"""
-        return {
-            "model_name": settings.MODEL_NAME,
-            "num_classes": settings.NUM_CLASSES,
-            "device": self.device,
-            "model_loaded": self._model_loaded,
-            "pathology_threshold": settings.PATHOLOGY_THRESHOLD,
-        }

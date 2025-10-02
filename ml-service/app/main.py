@@ -54,21 +54,6 @@ class StudyPredictionRequest(BaseModel):
     image_paths: List[str]
 
 
-class ImagePrediction(BaseModel):
-    image_path: str
-    contrast_type: str
-    pathology_probability: float
-    has_pathology: bool
-
-
-class StudyPredictionResponse(BaseModel):
-    study_id: int
-    total_images: int
-    pathology_images: List[str]
-    predictions: List[ImagePrediction]
-    study_has_pathology: bool
-
-
 @app.get("/health")
 async def health_check():
     """Проверка здоровья сервиса"""

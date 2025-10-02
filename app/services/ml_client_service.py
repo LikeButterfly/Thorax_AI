@@ -2,10 +2,9 @@
 Сервис для взаимодействия с ML сервисом
 """
 
-import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 
@@ -19,7 +18,7 @@ class MLClientService:
 
     def __init__(self):
         self.ml_service_url = settings.ml_service_url
-        self.timeout = 300  # 5 минут для обработки исследования
+        self.timeout = 3600  # 60 минут для обработки исследования  # FIXMEЫ
 
     async def predict_study(self, study_id: int, image_paths: List[str]) -> Dict[str, Any]:
         """
