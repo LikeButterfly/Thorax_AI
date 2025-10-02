@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Исследование - ThoraxAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Заголовок -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="/studies">Исследования</a></li>
+                            <li class="breadcrumb-item active" id="studyBreadcrumb">Загрузка...</li>
+                        </ol>
+                    </nav>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-microscope me-2"></i>
+                        <span id="studyTitle">Исследование</span>
+                    </h1>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary" onclick="window.history.back()">
+                        <i class="fas fa-arrow-left me-2"></i>
+                        Назад
+                    </button>
+                </div>
+            </div>
+
+            <!-- Основная информация -->
+            <div class="row mb-4">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Основная информация
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Путь исследования</label>
+                                    <div class="form-control-plaintext" id="pathToStudy" style="word-break: break-all; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="">-</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Study UID</label>
+                                    <div class="form-control-plaintext" id="studyUid">-</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Статус обработки</label>
+                                    <div id="processingStatus">-</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Наличие патологии</label>
+                                    <div id="pathologyStatus">-</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Вероятность патологии</label>
+                                    <div class="form-control-plaintext" id="probabilityOfPathology">-</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Время обработки</label>
+                                    <div class="form-control-plaintext" id="processingTime">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-bar me-2"></i>
+                                Статистика
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-2 text-center">
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="h5 mb-0 text-primary" id="totalFiles">0</div>
+                                        <small class="text-muted">Всего файлов</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="h5 mb-0 text-info" id="dicomFiles">0</div>
+                                        <small class="text-muted">DICOM файлов</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="h5 mb-0 text-success" id="validCtFiles">0</div>
+                                        <small class="text-muted">Валидных CT</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="h5 mb-0 text-warning" id="processedSeries">0</div>
+                                        <small class="text-muted">Обработано серий</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Дополнительная информация -->
+            <div class="row mb-4">
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-clock me-2"></i>
+                                Временные метки
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label fw-bold">Создано</label>
+                                    <div class="form-control-plaintext" id="createdAt">-</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-bold">Обновлено</label>
+                                    <div class="form-control-plaintext" id="updatedAt">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Ошибки и предупреждения
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="errorMessage" class="text-muted">Нет ошибок</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Действия с патологиями -->
+            <div class="row mb-4" id="pathologyActions" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-search me-2"></i>
+                                Анализ патологий
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <button class="btn btn-success w-100" onclick="downloadPathologyImages()" id="downloadImagesBtn" disabled>
+                                        <i class="fas fa-images me-2"></i>
+                                        Скачать изображения патологий
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <button class="btn btn-info w-100" onclick="downloadPathologyDicom()" id="downloadDicomBtn" disabled>
+                                        <i class="fas fa-file-medical me-2"></i>
+                                        Скачать DICOM патологий
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Дополнительные поля -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list me-2"></i>
+                                Дополнительная информация
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Пропущено серий</label>
+                                    <div class="form-control-plaintext" id="skippedSeries">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для ошибок -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    Сообщение об ошибке
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <span id="errorModalMessage"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const studyId = window.location.pathname.split('/').pop();
+    loadStudyDetails(studyId);
+});
+
+async function loadStudyDetails(studyId) {
+    try {
+        const response = await fetch(`/api/v1/studies/${studyId}`);
+        const study = await response.json();
+
+        if (!response.ok) {
+            throw new Error(study.detail || 'Ошибка при загрузке исследования');
+        }
+
+        // Заполняем основную информацию
+        document.getElementById('studyTitle').textContent = study.path_to_study;
+        document.getElementById('studyBreadcrumb').textContent = study.path_to_study;
+
+        // Отображаем study_path с сокращением и tooltip
+        const studyPathElement = document.getElementById('pathToStudy');
+        const studyPath = study.study_path || study.path_to_study || 'N/A';
+        studyPathElement.textContent = studyPath;
+        studyPathElement.title = studyPath; // Полный путь в tooltip
+        document.getElementById('studyUid').textContent = study.study_uid || 'N/A';
+        document.getElementById('processingStatus').innerHTML = getStatusBadge(study.processing_status);
+        document.getElementById('pathologyStatus').innerHTML = getPathologyBadge(study.pathology);
+        document.getElementById('probabilityOfPathology').textContent =
+            study.probability_of_pathology ? `${(study.probability_of_pathology * 100).toFixed(1)}%` : 'N/A';
+        document.getElementById('processingTime').textContent =
+            study.processing_time ? `${study.processing_time.toFixed(2)}с` : 'N/A';
+
+        // Статистика
+        document.getElementById('totalFiles').textContent = study.total_files_found || 0;
+        document.getElementById('dicomFiles').textContent = study.dicom_files_found || 0;
+        document.getElementById('validCtFiles').textContent = study.valid_ct_files || 0;
+        document.getElementById('processedSeries').textContent = study.processed_series_count || 0;
+
+        // Временные метки
+        document.getElementById('createdAt').textContent =
+            study.created_at ? new Date(study.created_at).toLocaleString('ru-RU') : 'N/A';
+        document.getElementById('updatedAt').textContent =
+            study.updated_at ? new Date(study.updated_at).toLocaleString('ru-RU') : 'N/A';
+
+        // Ошибки
+        const errorDiv = document.getElementById('errorMessage');
+        if (study.error_message) {
+            errorDiv.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${study.error_message}
+                </div>
+            `;
+        } else {
+            errorDiv.innerHTML = '<span class="text-success"><i class="fas fa-check me-2"></i>Нет ошибок</span>';
+        }
+
+        // Дополнительная информация
+        document.getElementById('skippedSeries').textContent = study.skipped_series_count || 0;
+
+        // Показываем действия с патологиями только для успешно обработанных исследований
+        if (study.processing_status === 'Success') {
+            document.getElementById('pathologyActions').style.display = 'block';
+
+            // Если патологии найдены, активируем кнопки скачивания
+            if (study.pathology) {
+                document.getElementById('downloadImagesBtn').disabled = false;
+                document.getElementById('downloadDicomBtn').disabled = false;
+            }
+        }
+
+    } catch (error) {
+        console.error('Ошибка при загрузке исследования:', error);
+        showError('Ошибка при загрузке исследования: ' + error.message);
+    }
+}
+
+function getStatusBadge(status) {
+    const statusMap = {
+        'Pending': { class: 'badge bg-warning', text: 'Ожидание', icon: 'fas fa-clock' },
+        'Processing': { class: 'badge bg-info', text: 'Обработка', icon: 'fas fa-spinner fa-spin' },
+        'Success': { class: 'badge bg-success', text: 'Успешно', icon: 'fas fa-check' },
+        'Failure': { class: 'badge bg-danger', text: 'Ошибка', icon: 'fas fa-times' }
+    };
+
+    const statusInfo = statusMap[status] || { class: 'badge bg-secondary', text: status, icon: 'fas fa-question' };
+    return `<span class="${statusInfo.class}"><i class="${statusInfo.icon} me-1"></i>${statusInfo.text}</span>`;
+}
+
+function getPathologyBadge(pathology) {
+    if (pathology === true) {
+        return '<span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Патология</span>';
+    } else if (pathology === false) {
+        return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Норма</span>';
+    } else {
+        return '<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Неизвестно</span>';
+    }
+}
+
+function showError(message) {
+    document.getElementById('errorModalMessage').textContent = message;
+    new bootstrap.Modal(document.getElementById('errorModal')).show();
+}
+
+function showSuccess(message) {
+    // Создаем временное уведомление об успехе
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <i class="fas fa-check-circle me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    document.body.appendChild(alertDiv);
+
+    // Автоматически скрываем через 3 секунды
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+
+
+async function downloadPathologyImages() {
+    const studyId = window.location.pathname.split('/').pop();
+    try {
+        const response = await fetch(`/api/v1/studies/${studyId}/download/pathology-images`);
+
+        if (response.ok) {
+            // Получаем blob из ответа
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            // Пробуем автоматическое скачивание
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `pathology_images_${studyId}.zip`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            // Ждем немного и удаляем ссылку
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+
+            // Показываем сообщение об успехе
+            showSuccess(`Изображения патологий скачаны: pathology_images_${studyId}.zip`);
+        } else {
+            const errorData = await response.json();
+            showError(errorData.detail || 'Ошибка при скачивании изображений');
+        }
+    } catch (error) {
+        console.error('Ошибка при скачивании изображений:', error);
+        showError('Ошибка при скачивании изображений');
+    }
+}
+
+async function downloadPathologyDicom() {
+    const studyId = window.location.pathname.split('/').pop();
+    try {
+        const response = await fetch(`/api/v1/studies/${studyId}/download/pathology-dicom`);
+
+        if (response.ok) {
+            // Получаем blob из ответа
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+
+            // Пробуем автоматическое скачивание
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `pathology_dicom_${studyId}.zip`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            // Ждем немного и удаляем ссылку
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+
+            // Показываем сообщение об успехе
+            showSuccess(`DICOM файлы патологий скачаны: pathology_dicom_${studyId}.zip`);
+        } else {
+            const errorData = await response.json();
+            showError(errorData.detail || 'Ошибка при скачивании DICOM файлов');
+        }
+    } catch (error) {
+        console.error('Ошибка при скачивании DICOM файлов:', error);
+        showError('Ошибка при скачивании DICOM файлов');
+    }
+}
+</script>
+
+<style>
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    background: linear-gradient(135deg, #0c5d74, #1a7a8c);
+    color: white;
+    border-bottom: none;
+}
+
+.form-control-plaintext {
+    padding: 0.375rem 0;
+    border-bottom: 1px solid #dee2e6;
+    background-color: transparent;
+    color: inherit;
+}
+
+[data-theme="dark"] .form-control-plaintext {
+    border-bottom-color: #495057;
+    color: #e9ecef;
+}
+
+.badge {
+    font-size: 0.875rem;
+}
+
+.btn {
+    transition: all 0.2s ease-in-out;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+</style>
+{% endblock %}

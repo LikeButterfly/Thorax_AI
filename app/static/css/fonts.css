@@ -1,0 +1,212 @@
+/* Montserrat Font Family - только основные веса */
+@font-face {
+    font-family: 'Montserrat';
+    src: url('/static/fonts/montserrat/Montserrat-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('/static/fonts/montserrat/Montserrat-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('/static/fonts/montserrat/Montserrat-SemiBold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Montserrat';
+    src: url('/static/fonts/montserrat/Montserrat-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Очень консервативный подход - только основные заголовки и бренд */
+.display-4, .display-3, .display-2, .display-1 {
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+}
+
+.navbar-brand {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+}
+
+/* Специальные классы для медицинских элементов */
+.medical-title {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+}
+
+.medical-subtitle {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 400;
+}
+
+/* Пагинация в стиле приложения */
+.pagination {
+    margin: 2rem 0;
+}
+
+.pagination .page-link {
+    color: rgb(12, 93, 116);
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    margin: 0 0.25rem;
+    padding: 0.5rem 0.75rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover {
+    color: rgb(8, 70, 87);
+    background-color: rgba(12, 93, 116, 0.1);
+    border-color: rgb(12, 93, 116);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(12, 93, 116, 0.2);
+}
+
+.pagination .page-item.active .page-link {
+    background-color: rgb(12, 93, 116);
+    border-color: rgb(12, 93, 116);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(12, 93, 116, 0.3);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #ffffff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pagination .page-item.disabled .page-link:hover {
+    color: #6c757d;
+    background-color: #ffffff;
+    border-color: #dee2e6;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Стили для многоточия */
+.pagination .page-item.disabled .page-link:not([data-page]) {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 0.5rem;
+}
+
+.pagination .page-item.disabled .page-link:not([data-page]):hover {
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Информация о пагинации */
+.pagination-info {
+    text-align: center;
+    margin-top: 1rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.pagination-info i {
+    color: rgb(12, 93, 116);
+    margin-right: 0.5rem;
+}
+
+/* Темная тема для пагинации */
+[data-theme="dark"] .pagination .page-link {
+    color: #2c3e50;
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+[data-theme="dark"] .pagination .page-link:hover {
+    color: #ffffff;
+    background-color: rgba(12, 93, 116, 0.2);
+    border-color: rgb(12, 93, 116);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(12, 93, 116, 0.2);
+}
+
+[data-theme="dark"] .pagination .page-item.active .page-link {
+    background-color: rgb(12, 93, 116);
+    border-color: rgb(12, 93, 116);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(12, 93, 116, 0.3);
+}
+
+[data-theme="dark"] .pagination .page-item.disabled .page-link {
+    color: #2c3e50;
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+[data-theme="dark"] .pagination .page-item.disabled .page-link:hover {
+    color: #2c3e50;
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    transform: none;
+    box-shadow: none;
+}
+
+[data-theme="dark"] .pagination .page-item.disabled .page-link:not([data-page]) {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 0.5rem;
+}
+
+[data-theme="dark"] .pagination .page-item.disabled .page-link:not([data-page]):hover {
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+}
+
+[data-theme="dark"] .pagination-info {
+    color: #adb5bd;
+}
+
+[data-theme="dark"] .pagination-info i {
+    color: rgb(12, 93, 116);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .pagination .page-link {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.85rem;
+        margin: 0.1rem;
+    }
+
+    .pagination-info {
+        font-size: 0.8rem;
+    }
+}

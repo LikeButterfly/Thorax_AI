@@ -1,0 +1,15 @@
+# ML Service Dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# Core ML dependencies
+numpy==1.24.3
+timm==0.9.12
+pillow==10.1.0
+pandas
+statsmodels==0.14.4
+
+# Additional dependencies
+httpx==0.25.2
+python-multipart==0.0.6

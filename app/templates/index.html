@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Главная - ThoraxAI{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="text-center mb-5">
+            <h1 class="display-4 text-primary medical-title">
+                <i class="fas fa-lungs"></i> ThoraxAI
+            </h1>
+            <p class="lead">Система автоматического анализа КТ органов грудной клетки</p>
+            <p class="text-muted">
+                Загрузите ZIP-архивы с DICOM файлами для анализа на наличие патологий (до 400 исследований)
+            </p>
+
+        </div>
+
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-upload"></i> Загрузка исследования
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+
+                    <div class="upload-area" id="uploadArea">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                        <h5>Перетащите ZIP файлы сюда или нажмите для выбора</h5>
+                        <p class="text-muted">Поддерживаются только ZIP архивы с DICOM файлами</p>
+                        <input type="file" id="fileInput" name="files" accept=".zip" multiple style="display: none;">
+                        <button type="button" class="btn btn-outline-primary" id="selectFileBtn">
+                            <i class="fas fa-folder-open"></i> Выбрать файлы
+                        </button>
+                    </div>
+
+                    <div id="fileInfo" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="fas fa-file-archive"></i>
+                            <span id="fileName"></span>
+                            <span class="badge bg-secondary ms-2" id="fileSize"></span>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+                            <i class="fas fa-upload"></i> Загрузить и проанализировать
+                        </button>
+                    </div>
+                </form>
+
+                <div id="uploadProgress" class="mt-3" style="display: none;">
+                    <p class="text-center mt-2">Загрузка и обработка...</p>
+                </div>
+
+                <div id="uploadResult" class="mt-3" style="display: none;">
+                    <!-- Результат загрузки будет показан здесь -->
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-5">
+            <div class="col-md-4">
+                <div class="card feature-card">
+                    <div class="card-body">
+                        <i class="fas fa-brain feature-icon"></i>
+                        <h5>ИИ-анализ</h5>
+                        <p>Автоматическое выявление патологий с помощью машинного обучения</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card">
+                    <div class="card-body">
+                        <i class="fas fa-shield-alt feature-icon"></i>
+                        <h5>Безопасность</h5>
+                        <p>Защищенная обработка медицинских данных</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card">
+                    <div class="card-body">
+                        <i class="fas fa-chart-line feature-icon"></i>
+                        <h5>Точность</h5>
+                        <p>Высокая точность диагностики до 95%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadResult = document.getElementById('uploadResult');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // Инициализация: проверяем состояние кнопки
+    updateButtonState();
+
+    // Drag and drop functionality
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            showFilesInfo(files);
+        } else {
+            // Если файлы не выбраны, блокируем кнопку
+            fileInfo.style.display = 'none';
+            updateButtonState();
+        }
+    });
+
+    // Click to select file
+    let isFileDialogOpen = false;
+
+    document.getElementById('selectFileBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!isFileDialogOpen) {
+            isFileDialogOpen = true;
+            fileInput.click();
+
+            // Сброс флага через небольшую задержку
+            setTimeout(() => {
+                isFileDialogOpen = false;
+            }, 100);
+        }
+    });
+
+    fileInput.addEventListener('change', function() {
+        isFileDialogOpen = false; // Сброс флага при выборе файла
+        if (this.files.length > 0) {
+            showFilesInfo(this.files);
+        } else {
+            // Если файлы не выбраны, блокируем кнопку
+            fileInfo.style.display = 'none';
+            updateButtonState();
+        }
+    });
+
+    function showFilesInfo(files) {
+        if (files.length > 400) {
+            alert('Максимум 400 файлов за раз');
+            fileInput.value = '';
+            updateButtonState(); // Проверяем состояние кнопки
+            return;
+        }
+
+        if (files.length === 1) {
+            fileName.textContent = files[0].name;
+            fileSize.textContent = formatFileSize(files[0].size);
+        } else {
+            fileName.textContent = `Выбрано файлов: ${files.length}`;
+            let totalSize = 0;
+            for (let i = 0; i < files.length; i++) {
+                totalSize += files[i].size;
+            }
+            fileSize.textContent = formatFileSize(totalSize);
+        }
+
+        fileInfo.style.display = 'block';
+        updateButtonState(); // Проверяем состояние кнопки
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function resetFileSelection() {
+        // Скрываем информацию о файле
+        fileInfo.style.display = 'none';
+
+        // Очищаем input
+        fileInput.value = '';
+
+        // Проверяем состояние кнопки
+        updateButtonState();
+    }
+
+    // Form submission
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Проверяем, что файлы выбраны и кнопка активна
+        if (fileInput.files.length === 0 || submitBtn.disabled) {
+            showError('Пожалуйста, выберите файлы для загрузки');
+            return;
+        }
+
+        const formData = new FormData();
+
+        // Всегда используем один endpoint для всех файлов
+        for (let i = 0; i < fileInput.files.length; i++) {
+            formData.append('files', fileInput.files[i]);
+        }
+
+        submitBtn.disabled = true;
+        uploadProgress.style.display = 'block';
+        uploadResult.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/v1/studies/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                console.log('Upload result:', result);
+                showSuccess(result);
+                // Сбрасываем только форму, но оставляем результат
+                resetFileSelection();
+            } else {
+                showError(result.detail || 'Ошибка при загрузке файла');
+                // Разблокируем кнопку только при ошибке
+                submitBtn.disabled = false;
+            }
+        } catch (error) {
+            showError('Ошибка соединения с сервером');
+            // Разблокируем кнопку только при ошибке
+            submitBtn.disabled = false;
+        } finally {
+            uploadProgress.style.display = 'none';
+            // НЕ разблокируем кнопку здесь - это делает resetFileSelection() или showError()
+        }
+    });
+
+    function showSuccess(result) {
+        console.log('showSuccess called with:', result);
+        const statusClass = result.processing_status === 'Completed' ? 'success' : 'warning';
+        const statusIcon = result.processing_status === 'Completed' ? 'check-circle' : 'exclamation-triangle';
+
+        uploadResult.innerHTML = `
+            <div class="alert alert-${statusClass}">
+                <h5><i class="fas fa-${statusIcon}"></i> Обработка завершена!</h5>
+                <p><strong>Сообщение:</strong> ${result.message}</p>
+                <p><strong>Обработано исследований:</strong> ${result.processed_files} из ${result.total_files}</p>
+                ${result.failed_files > 0 ? `<p><strong>Ошибок:</strong> ${result.failed_files}</p>` : ''}
+                <p><strong>Статус:</strong> <span class="badge bg-${statusClass}">${result.processing_status}</span></p>
+                <div class="mt-3">
+                    <a href="/batches/${result.batch_id}" class="btn btn-primary">
+                        <i class="fas fa-eye"></i> Посмотреть результаты
+                    </a>
+                    <a href="/batches" class="btn btn-outline-primary ms-2">
+                        <i class="fas fa-list"></i> Все загрузки
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary ms-2" onclick="document.getElementById('uploadResult').style.display='none'">
+                        <i class="fas fa-times"></i> Скрыть
+                    </button>
+                </div>
+            </div>
+        `;
+        console.log('Setting uploadResult display to block');
+        uploadResult.style.display = 'block';
+        console.log('uploadResult display:', uploadResult.style.display);
+
+        // Проверяем состояние кнопки после успешной загрузки
+        updateButtonState();
+    }
+
+    function showError(message) {
+        uploadResult.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Ошибка!</h5>
+                <p>${message}</p>
+                <button type="button" class="btn btn-outline-secondary mt-2" onclick="document.getElementById('uploadResult').style.display='none'">
+                    <i class="fas fa-times"></i> Скрыть
+                </button>
+            </div>
+        `;
+        uploadResult.style.display = 'block';
+    }
+
+    // Универсальная функция для проверки состояния кнопки
+    function updateButtonState() {
+        if (fileInput.files.length === 0) {
+            // Нет файлов - блокируем кнопку
+            submitBtn.disabled = true;
+            submitBtn.classList.remove('btn-primary');
+            submitBtn.classList.add('btn-secondary');
+        } else {
+            // Есть файлы - активируем кнопку
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('btn-secondary');
+            submitBtn.classList.add('btn-primary');
+        }
+    }
+
+});
+</script>
+{% endblock %}

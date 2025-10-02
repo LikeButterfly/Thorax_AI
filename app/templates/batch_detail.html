@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Детали загрузки - ThoraxAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Хлебные крошки -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Главная</a></li>
+            <li class="breadcrumb-item"><a href="/batches">Загрузки</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Детали загрузки</li>
+        </ol>
+    </nav>
+
+    <!-- Заголовок и информация о батче -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h2><i class="fas fa-info-circle"></i> Детали загрузки</h2>
+                    <p class="text-muted" id="batchInfo">Загрузка информации...</p>
+                </div>
+                <div>
+                    <button class="btn btn-success" id="downloadReportBtn" onclick="downloadReport()">
+                        <i class="fas fa-download"></i> Скачать отчет
+                    </button>
+                    <a href="/batches" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-arrow-left"></i> Назад к списку
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="row mb-4" id="statsCards">
+        <!-- Статистика будет загружена через JavaScript -->
+    </div>
+
+    <!-- Фильтры -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <select class="form-select" id="statusFilter">
+                <option value="">Все статусы</option>
+                <option value="Success">Успешно</option>
+                <option value="Failed">Ошибка</option>
+                <option value="Pending">В обработке</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="pathologyFilter">
+                <option value="">Все результаты</option>
+                <option value="true">С патологией</option>
+                <option value="false">Без патологии</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию файла...">
+            </div>
+        </div>
+    </div>
+
+    <!-- Список исследований -->
+    <div id="studiesList" class="row">
+        <!-- Исследования будут загружены через JavaScript -->
+    </div>
+
+    <!-- Пагинация -->
+    <nav aria-label="Пагинация" class="mt-4">
+        <ul class="pagination justify-content-center" id="pagination">
+            <!-- Пагинация будет создана через JavaScript -->
+        </ul>
+    </nav>
+
+    <!-- Загрузка -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Загрузка...</span>
+        </div>
+        <p class="mt-2">Загрузка данных...</p>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const batchId = window.location.pathname.split('/').pop();
+    let currentPage = 1;
+    const pageSize = 12;
+    let allStudies = [];
+    let filteredStudies = [];
+    let batchData = null;
+
+    const batchInfo = document.getElementById('batchInfo');
+    const statsCards = document.getElementById('statsCards');
+    const studiesList = document.getElementById('studiesList');
+    const pagination = document.getElementById('pagination');
+    const loading = document.getElementById('loading');
+    const statusFilter = document.getElementById('statusFilter');
+    const pathologyFilter = document.getElementById('pathologyFilter');
+    const searchInput = document.getElementById('searchInput');
+
+    // Загрузка данных батча
+    async function loadBatchData() {
+        try {
+            loading.style.display = 'block';
+
+            // Загружаем информацию о батче
+            const batchResponse = await fetch(`/api/v1/studies/batches`);
+            if (!batchResponse.ok) {
+                throw new Error('Ошибка загрузки информации о батче');
+            }
+
+            const batches = await batchResponse.json();
+            batchData = batches.find(b => b.id == batchId);
+
+            if (!batchData) {
+                throw new Error('Батч не найден');
+            }
+
+            // Загружаем исследования батча
+            const studiesResponse = await fetch(`/api/v1/studies/batches/${batchId}/studies`);
+            if (!studiesResponse.ok) {
+                throw new Error('Ошибка загрузки исследований');
+            }
+
+            allStudies = await studiesResponse.json();
+            filteredStudies = [...allStudies];
+
+            renderBatchInfo();
+            renderStats();
+            renderStudies();
+            renderPagination();
+
+        } catch (error) {
+            console.error('Ошибка:', error);
+            studiesList.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка при загрузке данных: ${error.message}
+                    </div>
+                </div>
+            `;
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
+
+    // Отображение информации о батче
+    function renderBatchInfo() {
+        const uploadDate = new Date(batchData.upload_date);
+        const formattedDate = uploadDate.toLocaleString('ru-RU');
+
+        batchInfo.textContent = `Загружено: ${formattedDate}`;
+    }
+
+    // Отображение статистики
+    function renderStats() {
+        const successRate = batchData.total_studies > 0 ?
+            Math.round((batchData.processed_studies / batchData.total_studies) * 100) : 0;
+
+        statsCards.innerHTML = `
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary">${batchData.total_studies}</h5>
+                        <p class="card-text">Исследований</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">${batchData.processed_studies}</h5>
+                        <p class="card-text">Обработано</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-danger">${batchData.failed_studies}</h5>
+                        <p class="card-text">Ошибок</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">${successRate}%</h5>
+                        <p class="card-text">Успешность</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Отображение исследований (используем тот же код что и в studies.html)
+    function renderStudies() {
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const studiesToShow = filteredStudies.slice(startIndex, endIndex);
+
+        if (studiesToShow.length === 0) {
+            studiesList.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle"></i>
+                        Исследования не найдены
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        studiesList.innerHTML = studiesToShow.map(study => createStudyCardContent(study)).join('');
+    }
+
+    // Создание содержимого карточки исследования
+    function createStudyCardContent(study) {
+        const statusBadge = getStatusBadge(study.processing_status);
+        const pathologyBadge = getPathologyBadge(study.pathology);
+        const probability = study.probability_of_pathology ? `${(study.probability_of_pathology * 100).toFixed(1)}%` : 'N/A';
+
+        return `
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card h-100 study-card clickable-card" onclick="window.location.href='/studies/${study.id}'">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-file-medical me-2"></i>
+                            ${study.path_to_study}
+                        </h6>
+                        ${statusBadge}
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="text-center mb-1">
+                                    <small class="text-muted">Статус патологии</small>
+                                </div>
+                                <div class="d-flex justify-content-center">
+                                    ${pathologyBadge}
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center mb-1">
+                                    <small class="text-muted">Вероятность</small>
+                                </div>
+                                <div class="text-center">
+                                    <div class="h5 mb-0 text-primary fw-bold">${probability}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Получение бейджа статуса
+    function getStatusBadge(status) {
+        const badges = {
+            'Success': '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Успешно</span>',
+            'Failed': '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Ошибка</span>',
+            'Pending': '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>В обработке</span>',
+            'Processing': '<span class="badge bg-info"><i class="fas fa-spinner me-1"></i>Обрабатывается</span>'
+        };
+        return badges[status] || '<span class="badge bg-secondary">Неизвестно</span>';
+    }
+
+    // Получение бейджа патологии
+    function getPathologyBadge(pathology) {
+        if (pathology === true) {
+            return '<span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>Есть патология</span>';
+        } else if (pathology === false) {
+            return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Норма</span>';
+        } else {
+            return '<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Неизвестно</span>';
+        }
+    }
+
+    // Отображение пагинации (тот же код что и в других страницах)
+    function renderPagination() {
+        const totalPages = Math.ceil(filteredStudies.length / pageSize);
+
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let paginationHTML = '';
+
+        paginationHTML += `
+            <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            </li>
+        `;
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                paginationHTML += `
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                    </li>
+                `;
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                paginationHTML += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+        }
+
+        paginationHTML += `
+            <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        `;
+
+        pagination.innerHTML = paginationHTML;
+    }
+
+    // Смена страницы
+    function changePage(page) {
+        const totalPages = Math.ceil(filteredStudies.length / pageSize);
+        if (page < 1 || page > totalPages) return;
+
+        currentPage = page;
+        renderStudies();
+        renderPagination();
+
+        studiesList.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Фильтрация исследований
+    function filterStudies() {
+        const statusValue = statusFilter.value;
+        const pathologyValue = pathologyFilter.value;
+        const searchTerm = searchInput.value.toLowerCase();
+
+        filteredStudies = allStudies.filter(study => {
+            const matchesStatus = !statusValue || study.processing_status === statusValue;
+            const matchesPathology = !pathologyValue ||
+                (pathologyValue === 'true' && study.pathology === true) ||
+                (pathologyValue === 'false' && study.pathology === false);
+            const matchesSearch = !searchTerm ||
+                study.path_to_study.toLowerCase().includes(searchTerm);
+
+            return matchesStatus && matchesPathology && matchesSearch;
+        });
+
+        currentPage = 1;
+        renderStudies();
+        renderPagination();
+    }
+
+    // Скачивание отчета
+    async function downloadReport() {
+        try {
+            const response = await fetch(`/api/v1/studies/batches/${batchId}/report`);
+            if (!response.ok) {
+                throw new Error('Ошибка при скачивании отчета');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `batch_report_${batchId}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+        } catch (error) {
+            alert('Ошибка при скачивании отчета: ' + error.message);
+        }
+    }
+
+    // Сделаем функции глобальными
+    window.changePage = changePage;
+    window.downloadReport = downloadReport;
+
+    // Обработчики событий
+    statusFilter.addEventListener('change', filterStudies);
+    pathologyFilter.addEventListener('change', filterStudies);
+    searchInput.addEventListener('input', filterStudies);
+
+    // Загружаем данные при загрузке страницы
+    loadBatchData();
+});
+</script>
+{% endblock %}

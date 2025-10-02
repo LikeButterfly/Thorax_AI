@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Управление файлами - ThoraxAI{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="text-center mb-5">
+            <h2 class="text-primary">
+                <i class="fas fa-trash-alt me-2"></i> Управление файлами исследований
+            </h2>
+            <p class="text-muted">Массовое удаление файлов исследований</p>
+        </div>
+
+        <!-- Статус системы -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i> Статус системы
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="activeAnalyses" class="alert alert-info">
+                    <i class="fas fa-spinner fa-spin me-2"></i> Проверка активных анализов...
+                </div>
+            </div>
+        </div>
+
+        <!-- Удаление файлов -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i> Удаление файлов
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    Нажмите кнопку ниже, чтобы удалить <strong>все</strong> файлы исследований (ZIP архивы, извлеченные DICOM и PNG изображения) с сервера.
+                    Данные в базе данных останутся нетронутыми, но файлы будут недоступны для скачивания.
+                </p>
+                <button class="btn btn-danger btn-lg w-100" id="cleanupBtn" onclick="cleanupAllFiles()" disabled>
+                    <i class="fas fa-trash-alt me-2"></i> Удалить все файлы
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalLabel">Подтверждение действия</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="confirmMessage">
+                <!-- Сообщение будет вставлено сюда JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger" id="confirmActionBtn">Подтвердить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="liveToast" class="toast hide" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto" id="toastTitle"></strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastBody"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let currentStatus = {
+        has_active_analyses: true,
+        can_cleanup: false,
+        cleanup_message: "Идет загрузка и обработка исследований"
+    };
+
+    // Утилитарные функции для тостов
+    function showToast(title, message, isError = false) {
+        const toastElement = document.getElementById('liveToast');
+        const toastTitle = document.getElementById('toastTitle');
+        const toastBody = document.getElementById('toastBody');
+
+        toastTitle.textContent = title;
+        toastBody.textContent = message;
+
+        if (isError) {
+            toastTitle.classList.add('text-danger');
+            toastTitle.classList.remove('text-success');
+        } else {
+            toastTitle.classList.add('text-success');
+            toastTitle.classList.remove('text-danger');
+        }
+
+        const toast = new bootstrap.Toast(toastElement);
+        toast.show();
+    }
+
+    function showError(message) {
+        showToast('Ошибка', message, true);
+    }
+
+    function showSuccess(message) {
+        showToast('Успех', message);
+    }
+
+    function showConfirmModal(message, onConfirm) {
+        document.getElementById('confirmMessage').innerHTML = message;
+        document.getElementById('confirmActionBtn').onclick = () => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+            modal.hide();
+            onConfirm();
+        };
+        const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        confirmModal.show();
+    }
+
+    // Загрузка статуса при инициализации
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshStatus();
+    });
+
+    async function refreshStatus() {
+        try {
+            // Проверяем активные загрузки
+            const activeResponse = await fetch('/api/v1/cleanup/analyses');
+            if (activeResponse.ok) {
+                const activeData = await activeResponse.json();
+                currentStatus = {
+                    has_active_analyses: activeData.has_active_analyses,
+                    can_cleanup: !activeData.has_active_analyses,
+                    cleanup_message: activeData.has_active_analyses ? "Идет загрузка и обработка исследований" : "Можно удалять файлы"
+                };
+                updateUI();
+            } else {
+                showError('Ошибка при проверке активных загрузок');
+            }
+        } catch (error) {
+            console.error('Ошибка при обновлении статуса:', error);
+            showError('Ошибка при обновлении статуса');
+        }
+    }
+
+    function updateUI() {
+        if (!currentStatus) return;
+
+        // Обновляем статус системы
+        updateSystemStatus();
+
+        // Обновляем кнопки
+        updateButtons();
+    }
+
+    function updateSystemStatus() {
+        const activeAnalysesElement = document.getElementById('activeAnalyses');
+        if (currentStatus.has_active_analyses) {
+            activeAnalysesElement.className = 'alert alert-warning';
+            activeAnalysesElement.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${currentStatus.cleanup_message}`;
+        } else {
+            activeAnalysesElement.className = 'alert alert-success';
+            activeAnalysesElement.innerHTML = '<i class="fas fa-check-circle me-2"></i>Нет активных загрузок';
+        }
+    }
+
+    function updateButtons() {
+        const cleanupBtn = document.getElementById('cleanupBtn');
+
+        cleanupBtn.disabled = !currentStatus.can_cleanup;
+    }
+
+
+    function cleanupAllFiles() {
+        if (!currentStatus.can_cleanup) {
+            showError('Нельзя удалять файлы во время активных загрузок');
+            return;
+        }
+
+        const message = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Внимание!</h6>
+                <p>Вы собираетесь удалить <strong>ВСЕ</strong> файлы исследований.</p>
+                <p class="mb-0"><strong>Это действие нельзя отменить!</strong></p>
+            </div>
+        `;
+
+        showConfirmModal(message, () => {
+            performCleanup();
+        });
+    }
+
+    async function performCleanup() {
+        try {
+            const response = await fetch('/api/v1/cleanup/files', {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                showSuccess(data.message || 'Файлы успешно удалены');
+                refreshStatus(); // Обновляем статус после операции
+            } else {
+                const errorData = await response.json();
+                showError(errorData.detail || 'Ошибка при удалении файлов');
+            }
+        } catch (error) {
+            console.error('Ошибка при удалении файлов:', error);
+            showError('Ошибка при удалении файлов');
+        }
+    }
+</script>
+{% endblock %}

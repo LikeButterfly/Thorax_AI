@@ -1,0 +1,38 @@
+# Вызывать `pre-commit` перед каждым коммитом для автоматической проверки и форматирования
+# Вызывать `pre-commit run -a` для проверки и форматирования всех файлов
+# Вызывать `pre-commit autoupdate` для автоматического обновления версий хуков
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+
+  # - repo: local
+  #   hooks:
+  #     - id: mkdocs-strict-build
+  #       name: mkdocs pre-build check
+  #       language: system
+  #       pass_filenames: false
+  #       entry: ./hooks/mkdocs_prebuild_check
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.2
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.405
+    hooks:
+      - id: pyright

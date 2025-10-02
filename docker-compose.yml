@@ -1,0 +1,62 @@
+services:
+  # PostgreSQL база данных
+  thoraxai-database:
+    image: postgres:15
+    container_name: thoraxai-database
+    environment:
+      - POSTGRES_DB=thoraxai
+      - POSTGRES_USER=thoraxai
+      - POSTGRES_PASSWORD=thoraxai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - thorax-network
+
+  # ML сервис
+  ml-service:
+    build: ./ml-service
+    container_name: thoraxai-ml
+    ports:
+      - "8001:8001"
+    environment:
+      - MODEL_PATH=/app/models/swin_model_weights.pth
+      - DEVICE=cuda
+      - PATHOLOGY_THRESHOLD=0.9
+    runtime: nvidia
+    volumes:
+      - ./ml-service/models:/app/models
+      - ./data:/app/data  # Общий доступ к данным
+      - ./uploads:/app/uploads  # Доступ к загруженным файлам
+    networks:
+      - thorax-network
+
+  # Основной сервис (FastAPI)
+  main-service:
+    build: .
+    container_name: thoraxai-main
+    ports:
+      - "8000:8000"
+    environment:
+      - THORAX_DATABASE_URL=postgresql://thoraxai:thoraxai@thoraxai-database:5432/thoraxai
+      - THORAX_ML_SERVICE_URL=http://ml-service:8001
+      - THORAX_LOG_TO_FILE=false
+      - THORAX_ENVIRONMENT=production
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      - thoraxai-database
+      - ml-service
+    networks:
+      - thorax-network
+
+networks:
+  thorax-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  data:
+  uploads:
