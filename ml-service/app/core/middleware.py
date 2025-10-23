@@ -1,5 +1,5 @@
 """
-Middleware для приложения
+Middleware для ML сервиса
 """
 
 import logging
@@ -7,35 +7,17 @@ import time
 from typing import Callable
 
 from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
 def setup_middleware(app: FastAPI) -> None:
     """
-    Настройка middleware для приложения
+    Настройка middleware для ML сервиса
 
     Args:
         app: FastAPI приложение
     """
-    # Настройка CORS с безопасными настройками
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=settings.cors_allow_credentials,
-        allow_methods=settings.cors_allow_methods,
-        allow_headers=settings.cors_allow_headers,
-    )
-
-    # # Trusted Host Middleware для безопасности
-    # if settings.environment == "production":
-    #     app.add_middleware(
-    #         TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "*.ourdomain.com"]  # TODO  # noqa: E501
-    #     )
 
     # Middleware для логирования запросов
     @app.middleware("http")
@@ -54,7 +36,7 @@ def setup_middleware(app: FastAPI) -> None:
 
         # Логируем входящий запрос
         logger.info(
-            f"Request: {request.method} {request.url.path} "
+            f"ML Request: {request.method} {request.url.path} "
             f"from {request.client.host if request.client else 'unknown'}"
         )
 
@@ -65,10 +47,11 @@ def setup_middleware(app: FastAPI) -> None:
         process_time = time.time() - start_time
 
         # Логируем ответ
-        logger.info(f"Response: {response.status_code} in {process_time:.3f}s")
+        logger.info(f"ML Response: {response.status_code} in {process_time:.3f}s")
 
         # Добавляем заголовок с временем обработки
         response.headers["X-Process-Time"] = str(process_time)
+        response.headers["X-Service"] = "ml-service"
 
         return response
 
@@ -88,6 +71,8 @@ def setup_middleware(app: FastAPI) -> None:
         try:
             return await call_next(request)
         except Exception as e:
-            logger.error(f"Unhandled error in {request.method} {request.url.path}: {str(e)}")
+            logger.error(
+                f"Unhandled error in ML service {request.method} {request.url.path}: {str(e)}"
+            )
             # В production здесь должен быть более детальный error handling
             raise

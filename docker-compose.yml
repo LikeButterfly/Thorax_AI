@@ -14,15 +14,32 @@ services:
     networks:
       - thorax-network
 
+  # Redis для Celery
+  thoraxai-redis:
+    image: redis:7-alpine
+    container_name: thoraxai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - thorax-network
+    command: redis-server --appendonly yes
+
   # ML сервис
   ml-service:
-    build: ./ml-service
+    build:
+      context: .
+      dockerfile: ml-service/Dockerfile
     container_name: thoraxai-ml
     ports:
       - "8001:8001"
     environment:
-      - MODEL_PATH=/app/models/swin_model_weights.pth
-      - DEVICE=cuda
+      - ML_MODEL_PATH=/app/models/swin_model_weights.pth
+      - ML_DEVICE=cuda
+      - ML_LOG_LEVEL=INFO
+      - ML_LOG_TO_FILE=false
+      - ML_ENVIRONMENT=production
     runtime: nvidia
     volumes:
       - ./ml-service/models:/app/models
@@ -33,13 +50,16 @@ services:
 
   # Основной сервис (FastAPI)
   main-service:
-    build: .
+    build:
+      context: .
+      dockerfile: app/Dockerfile
     container_name: thoraxai-main
     ports:
       - "8000:8000"
     environment:
       - THORAX_DATABASE_URL=postgresql://thoraxai:thoraxai@thoraxai-database:5432/thoraxai
       - THORAX_ML_SERVICE_URL=http://ml-service:8001
+      - THORAX_REDIS_URL=redis://thoraxai-redis:6379/0
       - THORAX_LOG_TO_FILE=false
       - THORAX_ENVIRONMENT=production
     volumes:
@@ -47,6 +67,30 @@ services:
       - ./uploads:/app/uploads
     depends_on:
       - thoraxai-database
+      - thoraxai-redis
+      - ml-service
+    networks:
+      - thorax-network
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: thoraxai-celery-worker
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - THORAX_DATABASE_URL=postgresql://thoraxai:thoraxai@thoraxai-database:5432/thoraxai
+      - THORAX_ML_SERVICE_URL=http://ml-service:8001
+      - THORAX_REDIS_URL=redis://thoraxai-redis:6379/0
+      - THORAX_LOG_TO_FILE=false
+      - THORAX_ENVIRONMENT=production
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    depends_on:
+      - thoraxai-database
+      - thoraxai-redis
       - ml-service
     networks:
       - thorax-network
@@ -57,5 +101,6 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
   data:
   uploads:

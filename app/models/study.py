@@ -36,6 +36,9 @@ class UploadBatch(Base):
     processed_studies = Column(Integer, default=0, nullable=False)
     failed_studies = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_cancelled = Column(Boolean, default=False, nullable=False)
+    processing_start_time = Column(DateTime, nullable=True)
+    processing_end_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -288,3 +291,39 @@ class ActiveAnalysis(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CeleryTaskStatus(Base):
+    """
+    Модель для отслеживания статуса Celery задач
+
+    Хранит информацию о задачах в очереди и их статусе выполнения.
+    """
+
+    __tablename__ = "celery_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(String(255), unique=True, index=True, nullable=False)  # Celery task ID
+    batch_id = Column(Integer, ForeignKey("upload_batches.id"), nullable=False, index=True)
+    filename = Column(String(500), nullable=False)
+    status = Column(
+        String(50), default="PENDING", nullable=False, index=True
+    )  # PENDING, STARTED, SUCCESS, FAILURE, RETRY
+    result = Column(Text, nullable=True)  # JSON с результатом
+    error_message = Column(Text, nullable=True)
+    study_id = Column(Integer, ForeignKey("studies.id"), nullable=True, index=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'STARTED', 'SUCCESS', 'FAILURE', 'RETRY', 'REVOKED')",
+            name="check_task_status_valid",
+        ),
+        Index("idx_task_batch_status", "batch_id", "status"),
+        Index("idx_task_created", "created_at"),
+    )

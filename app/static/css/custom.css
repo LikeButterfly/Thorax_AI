@@ -512,13 +512,13 @@ main {
   border-color: #e9ecef;
 }
 
-/* Тонкий градиент для карточек - сдержанный и профессиональный */
+/* Тонкий градиент для карточек*/
 .study-card .card-body {
   background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   border-top: 1px solid rgba(12, 93, 116, 0.1);
 }
 
-/* Темный режим - более подходящий для медицинского интерфейса */
+/* Темный режим */
 [data-theme="dark"] .study-card .card-body {
   background: linear-gradient(135deg, #1a1a1ae8 0%, #2d2d2d 100%);
   border-top: 1px solid rgba(233, 236, 240, 0.1);

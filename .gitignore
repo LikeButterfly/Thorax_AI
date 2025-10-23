@@ -27,8 +27,14 @@ __pycache__/
 uploads/
 reports/
 
+# data
+data/
+
 # logs
 logs/
 
 # temp
 temp/
+
+# ML Models
+ml-service/models/*.pth

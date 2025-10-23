@@ -2,9 +2,9 @@
 API endpoints для работы с исследованиями
 """
 
+import base64
 import logging
 import os
-import tempfile
 import uuid
 from typing import List, Optional
 
@@ -17,9 +17,12 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.study import Study
 from app.schemas.study import (
+    AsyncUploadResponse,
+    BatchStatusResponse,
     StudyListResponse,
     StudyResponse,
     StudyUpdate,
+    TaskStatusResponse,
     UploadBatchListResponse,
     UploadResponse,
 )
@@ -29,11 +32,155 @@ from app.services.pathology_detection_service import PathologyDetectionService
 from app.services.report_service import ReportService
 from app.services.study_processing_service import StudyProcessingService
 from app.services.study_service import StudyService
+from app.services.task_service import TaskService
 from app.services.upload_batch_service import UploadBatchService
+from app.tasks.study_tasks import process_single_study_task
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/studies", tags=["studies"])
+
+
+@router.post("/upload-async", response_model=AsyncUploadResponse)
+async def upload_studies_async(
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Асинхронная загрузка множественных ZIP файлов с DICOM исследованиями
+
+    Ставит файлы в очередь на обработку и немедленно возвращает ответ.
+    Используйте /batches/{batch_id}/status для проверки прогресса.
+
+    Args:
+        files: Список ZIP файлов с DICOM исследованиями
+        db: Сессия базы данных
+
+    Returns:
+        AsyncUploadResponse: Результат постановки задач в очередь
+    """
+    try:
+        # Валидация входных данных
+        if not files:
+            raise HTTPException(status_code=400, detail="Необходимо загрузить хотя бы один файл")
+
+        if len(files) > 400:
+            raise HTTPException(status_code=400, detail="Максимум 400 файлов за раз")
+
+        # Проверяем файлы
+        for file in files:
+            if not file.filename:
+                raise HTTPException(status_code=400, detail="Файл без имени не поддерживается")
+
+            if not file.filename.endswith(".zip"):
+                raise HTTPException(
+                    status_code=400, detail=f"Файл {file.filename} не является ZIP архивом"
+                )
+
+        # Проверяем доступность ML сервиса в самом начале
+        ml_client = MLClientService()
+        ml_health = await ml_client.check_ml_service_health()
+        if not ml_health.get("available"):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "ML сервис недоступен. Анализ патологий невозможен. "
+                    "Проверьте, что ML сервис запущен и доступен."
+                ),
+            )
+
+        # Проверяем, нет ли уже активных загрузок (синхронных)
+        active_analysis_service = ActiveAnalysisService(db)
+        if active_analysis_service.has_active_analyses():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Уже выполняется синхронная загрузка и обработка исследований. "
+                    "Дождитесь завершения текущей операции."
+                ),
+            )
+
+        # Создаем батч загрузки
+        batch_service = UploadBatchService(db)
+        batch_id = batch_service.create_batch()
+
+        # Устанавливаем время начала обработки
+        batch_service.set_processing_start(batch_id)
+
+        # Инициализируем TaskService
+        task_service = TaskService(db)
+
+        task_ids = []
+        queued_count = 0
+
+        # Ставим каждый файл в очередь Celery
+        for file in files:
+            try:
+                # Читаем содержимое файла
+                content = await file.read()
+                file_size = len(content)
+
+                # Проверяем размер файла
+                if file_size > settings.max_file_size:
+                    logger.warning(
+                        f"Файл {file.filename} слишком большой ({file_size} bytes), пропускаем"
+                    )
+                    continue
+
+                # Кодируем содержимое в base64 для передачи в Celery
+                file_content_base64 = base64.b64encode(content).decode("utf-8")
+
+                # Создаем задачу Celery
+                task = process_single_study_task.apply_async(
+                    args=[
+                        file.filename,
+                        file_content_base64,
+                        batch_id,
+                        settings.save_zip_files,
+                    ],
+                )
+
+                # Сохраняем статус задачи в БД
+                task_service.create_task_status(
+                    task_id=task.id,
+                    batch_id=batch_id,
+                    filename=file.filename or "unknown.zip",
+                    status="PENDING",
+                )
+
+                task_ids.append(task.id)
+                queued_count += 1
+
+                logger.info(f"Файл {file.filename} поставлен в очередь (task_id: {task.id})")
+
+            except Exception as e:
+                logger.error(f"Ошибка при постановке файла {file.filename} в очередь: {str(e)}")
+                continue
+
+        # Обновляем статистику батча (пока все задачи pending)
+        batch_service.update_batch_stats(batch_id, len(files), 0, 0)
+
+        message = (
+            f"Всего файлов: {len(files)}. "
+            f"Задач поставлено в очередь: {queued_count}. "
+            f"Используйте /batches/{batch_id}/status для проверки прогресса."
+        )
+
+        return AsyncUploadResponse(
+            message=message,
+            batch_id=batch_id,
+            total_files=len(files),
+            queued_tasks=queued_count,
+            task_ids=task_ids,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при асинхронной загрузке файлов: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка при постановке файлов в очередь: {str(e)}"
+        ) from e
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -283,6 +430,176 @@ async def get_batch_studies(
     batch_service = UploadBatchService(db)
     studies = batch_service.get_batch_studies(batch_id)
     return studies
+
+
+@router.get("/batches/{batch_id}/status", response_model=BatchStatusResponse)
+async def get_batch_status(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Получить статус обработки батча с детальной информацией о задачах
+
+    Args:
+        batch_id: ID батча
+        db: Сессия базы данных
+
+    Returns:
+        BatchStatusResponse: Статус батча с задачами
+    """
+    try:
+        # Проверяем существование батча
+        batch_service = UploadBatchService(db)
+        batch = batch_service.get_batch(batch_id)
+
+        if not batch:
+            raise HTTPException(status_code=404, detail="Батч не найден")
+
+        # Получаем статистику и задачи
+        task_service = TaskService(db)
+        statistics = task_service.get_batch_statistics(batch_id)
+        tasks = task_service.get_batch_tasks(batch_id)
+
+        # Проверяем, завершена ли обработка батча
+        if statistics["progress_percentage"] >= 100 and batch.processing_end_time is None:
+            batch_service.set_processing_end(batch_id)
+            db.refresh(batch)
+
+        # Формируем ответ
+        return BatchStatusResponse(
+            batch_id=batch_id,
+            total_tasks=statistics["total_tasks"],
+            pending_tasks=statistics["pending_tasks"],
+            started_tasks=statistics["started_tasks"],
+            success_tasks=statistics["success_tasks"],
+            failed_tasks=statistics["failed_tasks"],
+            progress_percentage=statistics["progress_percentage"],
+            tasks=[
+                TaskStatusResponse(
+                    task_id=str(task.task_id),
+                    filename=str(task.filename),
+                    status=str(task.status),
+                    study_id=int(task.study_id) if task.study_id is not None else None,  # type: ignore  # noqa: E501
+                    error_message=str(task.error_message)
+                    if task.error_message is not None
+                    else None,  # noqa: E501
+                    created_at=task.created_at,  # type: ignore
+                    started_at=task.started_at,  # type: ignore
+                    completed_at=task.completed_at,  # type: ignore
+                )
+                for task in tasks
+            ],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса батча {batch_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка при получении статуса: {str(e)}"
+        ) from e
+
+
+@router.post("/batches/{batch_id}/cancel")
+async def cancel_batch(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Отменить обработку батча
+
+    Args:
+        batch_id: ID батча
+        db: Сессия базы данных
+
+    Returns:
+        Dict: Сообщение о результате отмены
+    """
+    try:
+        from app.core.celery_app import celery_app
+
+        # Проверяем существование батча
+        batch_service = UploadBatchService(db)
+        batch = batch_service.get_batch(batch_id)
+
+        if not batch:
+            raise HTTPException(status_code=404, detail="Батч не найден")
+
+        # Получаем все задачи батча
+        task_service = TaskService(db)
+        tasks = task_service.get_batch_tasks(batch_id)
+
+        # Отменяем задачи Celery
+        cancelled_count = 0
+        for task in tasks:
+            if task.status in ["PENDING", "STARTED"]:
+                try:
+                    celery_app.control.revoke(str(task.task_id), terminate=True, signal="SIGKILL")
+                    task_service.update_task_status(
+                        task_id=str(task.task_id),
+                        status="FAILURE",
+                        error_message="Отменено пользователем",
+                    )
+                    cancelled_count += 1
+                except Exception as e:
+                    logger.error(f"Ошибка при отмене задачи {task.task_id}: {str(e)}")
+
+        # Помечаем батч как отмененный
+        batch_service.cancel_batch(batch_id)
+
+        return {
+            "message": f"Батч #{batch_id} отменен. Отменено задач: {cancelled_count}",
+            "cancelled_tasks": cancelled_count,
+            "total_tasks": len(tasks),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при отмене батча {batch_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при отмене батча: {str(e)}") from e
+
+
+@router.get("/tasks/{task_id}/status", response_model=TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Получить статус конкретной задачи
+
+    Args:
+        task_id: ID задачи Celery
+        db: Сессия базы данных
+
+    Returns:
+        TaskStatusResponse: Статус задачи
+    """
+    try:
+        task_service = TaskService(db)
+        task = task_service.get_task_status(task_id)
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Задача не найдена")
+
+        return TaskStatusResponse(
+            task_id=str(task.task_id),
+            filename=str(task.filename),
+            status=str(task.status),
+            study_id=int(task.study_id) if task.study_id is not None else None,  # type: ignore
+            error_message=str(task.error_message) if task.error_message is not None else None,
+            created_at=task.created_at,  # type: ignore
+            started_at=task.started_at,  # type: ignore
+            completed_at=task.completed_at,  # type: ignore
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса задачи {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Ошибка при получении статуса задачи: {str(e)}"
+        ) from e
 
 
 @router.get("/batches/{batch_id}/report")

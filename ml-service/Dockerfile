@@ -31,7 +31,7 @@ RUN ln -s /usr/bin/python3.10 /usr/bin/python
 WORKDIR /app
 
 # Копируем requirements и устанавливаем зависимости
-COPY requirements.txt .
+COPY requirements/ ./requirements/
 
 # Устанавливаем PyTorch с CUDA 12.1 из официального индекса
 RUN python3.10 -m pip install --no-cache-dir \
@@ -41,10 +41,10 @@ RUN python3.10 -m pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cu121
 
 # Устанавливаем остальные зависимости
-RUN python3.10 -m pip install --no-cache-dir -r requirements.txt
+RUN python3.10 -m pip install --no-cache-dir -r requirements/ml.txt
 
 # Копируем код приложения
-COPY app/ ./app/
+COPY ml-service/app/ ./
 
 # Создаем директорию для модели
 RUN mkdir -p models
@@ -57,4 +57,4 @@ ENV MODEL_PATH=/app/models/swin_model_weights.pth
 EXPOSE 8001
 
 # Команда запуска
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

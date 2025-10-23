@@ -1,5 +1,5 @@
 """
-Настройка логирования для приложения
+Настройка логирования для ML сервиса
 """
 
 # TODO in common
@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.core.config import settings
+from core.config import settings
 
 
 class UTCPlus3Formatter(logging.Formatter):
@@ -31,7 +31,7 @@ class UTCPlus3Formatter(logging.Formatter):
 
 def setup_logging() -> None:
     """
-    Настройка логирования для приложения
+    Настройка логирования для ML сервиса
     """
     # Создаем директорию для логов только если нужно сохранять в файлы
     if settings.log_to_file:
@@ -58,7 +58,7 @@ def setup_logging() -> None:
                     "class": "logging.handlers.RotatingFileHandler",
                     "level": "INFO",
                     "formatter": "detailed",
-                    "filename": str(log_dir / "thoraxai.log"),
+                    "filename": str(log_dir / "ml_service.log"),
                     "maxBytes": 10485760,  # 10MB
                     "backupCount": 5,
                 },
@@ -66,7 +66,7 @@ def setup_logging() -> None:
                     "class": "logging.handlers.RotatingFileHandler",
                     "level": "ERROR",
                     "formatter": "detailed",
-                    "filename": str(log_dir / "thoraxai_errors.log"),
+                    "filename": str(log_dir / "ml_service_errors.log"),
                     "maxBytes": 10485760,  # 10MB
                     "backupCount": 5,
                 },
@@ -78,9 +78,9 @@ def setup_logging() -> None:
     if settings.log_to_file:
         app_handlers.extend(["file", "error_file"])
 
-    sqlalchemy_handlers = ["console"]
+    torch_handlers = ["console"]
     if settings.log_to_file:
-        sqlalchemy_handlers.append("file")
+        torch_handlers.append("file")
 
     uvicorn_handlers = ["console"]
     if settings.log_to_file:
@@ -95,12 +95,12 @@ def setup_logging() -> None:
         "disable_existing_loggers": False,
         "formatters": {
             "default": {
-                "()": "app.core.logging.UTCPlus3Formatter",
+                "()": "core.logging.UTCPlus3Formatter",
                 "format": settings.log_format,
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
             "detailed": {
-                "()": "app.core.logging.UTCPlus3Formatter",
+                "()": "core.logging.UTCPlus3Formatter",
                 "format": (
                     "%(asctime)s - %(name)s - %(levelname)s - %(module)s - "
                     "%(funcName)s:%(lineno)d - %(message)s"
@@ -122,9 +122,14 @@ def setup_logging() -> None:
                 "handlers": app_handlers,
                 "propagate": False,
             },
-            "sqlalchemy.engine": {
+            "torch": {
                 "level": "WARNING",
-                "handlers": sqlalchemy_handlers,
+                "handlers": torch_handlers,
+                "propagate": False,
+            },
+            "timm": {
+                "level": "WARNING",
+                "handlers": torch_handlers,
                 "propagate": False,
             },
             "uvicorn": {
@@ -145,11 +150,11 @@ def setup_logging() -> None:
     # Настраиваем логирование для внешних библиотек
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("pydicom").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
     # Логируем информацию о настройке
     logger = logging.getLogger(__name__)
-    logger.info(f"Logging configured for {settings.environment} environment")
+    logger.info(f"ML Service logging configured for {settings.environment} environment")
     logger.info(f"Log level: {settings.log_level}")
     logger.info(f"Log to file: {settings.log_to_file}")
     if settings.log_to_file and log_dir:

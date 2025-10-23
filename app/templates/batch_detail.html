@@ -20,9 +20,10 @@
                 <div>
                     <h2><i class="fas fa-info-circle"></i> Детали загрузки</h2>
                     <p class="text-muted" id="batchInfo">Загрузка информации...</p>
+                    <p class="text-muted" id="processingTimeDisplay" style="display: none;"></p>
                 </div>
                 <div>
-                    <button class="btn btn-success" id="downloadReportBtn" onclick="downloadReport()">
+                    <button class="btn btn-success" id="downloadReportBtn" onclick="downloadReport()" style="display: none;">
                         <i class="fas fa-download"></i> Скачать отчет
                     </button>
                     <a href="/batches" class="btn btn-outline-secondary ms-2">
@@ -38,8 +39,44 @@
         <!-- Статистика будет загружена через JavaScript -->
     </div>
 
+    <!-- Статус задач Celery -->
+    <div class="row mb-4" id="tasksStatus" style="display: none;">
+        <div class="col-12">
+            <div class="card processing-status-card" style="border: 1px solid rgba(0, 0, 0, .125) !important; background-color: #1a1d20 !important;">
+                <div class="card-header text-white" style="background-color: rgb(12, 93, 116) !important; border-bottom: 1px solid rgba(0, 0, 0, .125) !important;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-tasks"></i> Статус обработки
+                            <span id="taskStatusBadge" class="badge ms-2" style="background-color: rgb(8, 70, 87);"></span>
+                        </h5>
+                        <button class="btn btn-sm btn-outline-light" id="cancelBatchBtn" onclick="cancelBatch()" style="display: none;">
+                            <i class="fas fa-times-circle"></i> Отменить
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="taskProgressBar" class="mb-3"></div>
+                    <div id="tasksList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    /* Градиент для карточки обработки */
+    [data-theme="dark"] .processing-status-card {
+        background: linear-gradient(135deg, #1a1a1ae8 0%, #2d2d2d 100%);
+        border-color: rgb(12, 93, 116) !important;
+    }
+
+    [data-theme="light"] .processing-status-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-color: rgba(0, 0, 0, .125) !important;
+    }
+    </style>
+
     <!-- Фильтры -->
-    <div class="row mb-3">
+    <div class="row mb-5" id="filtersSection">
         <div class="col-md-3">
             <select class="form-select" id="statusFilter">
                 <option value="">Все статусы</option>
@@ -69,18 +106,17 @@
     </div>
 
     <!-- Пагинация -->
-    <nav aria-label="Пагинация" class="mt-4">
+    <nav aria-label="Пагинация" class="mt-4" id="paginationSection">
         <ul class="pagination justify-content-center" id="pagination">
             <!-- Пагинация будет создана через JavaScript -->
         </ul>
     </nav>
 
     <!-- Загрузка -->
-    <div id="loading" class="text-center py-5">
+    <div id="loading" class="text-center py-5" style="display: none; min-height: 200px;">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Загрузка...</span>
         </div>
-        <p class="mt-2">Загрузка данных...</p>
     </div>
 </div>
 
@@ -102,10 +138,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const pathologyFilter = document.getElementById('pathologyFilter');
     const searchInput = document.getElementById('searchInput');
 
+    let statusPolling = null;
+
     // Загрузка данных батча
     async function loadBatchData() {
         try {
-            loading.style.display = 'block';
+            if (loading) loading.style.display = 'flex';
 
             // Загружаем информацию о батче
             const batchResponse = await fetch(`/api/v1/studies/batches`);
@@ -134,6 +172,9 @@ document.addEventListener('DOMContentLoaded', function() {
             renderStudies();
             renderPagination();
 
+            // Загружаем статус задач
+            await loadTasksStatus();
+
         } catch (error) {
             console.error('Ошибка:', error);
             studiesList.innerHTML = `
@@ -149,10 +190,264 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Загрузка статуса задач Celery
+    async function loadTasksStatus() {
+        try {
+            const response = await fetch(`/api/v1/studies/batches/${batchId}/status`);
+            if (!response.ok) return;
+
+            const status = await response.json();
+
+            // Показываем секцию задач только если есть задачи
+            if (status.total_tasks > 0) {
+                document.getElementById('tasksStatus').style.display = 'block';
+                renderTasksStatus(status);
+                updateProcessingTime();
+
+                // Если обработка не завершена, скрываем лишнее (polling запускается отдельно при инициализации)
+                if (status.progress_percentage < 100) {
+                    // Скрываем кнопку отчета, фильтры и список исследований
+                    document.getElementById('downloadReportBtn').style.display = 'none';
+                    document.getElementById('filtersSection').style.display = 'none';
+                    document.getElementById('studiesList').style.display = 'none';
+                    document.getElementById('paginationSection').style.display = 'none';
+                } else {
+                    // Останавливаем polling при достижении 100%
+                    stopStatusPolling();
+
+                    // Скрываем блок "Статус обработки" при 100%
+                    document.getElementById('tasksStatus').style.display = 'none';
+
+                    // Показываем все после завершения
+                    document.getElementById('downloadReportBtn').style.display = 'inline-block';
+                    document.getElementById('filtersSection').style.display = 'flex';
+                    document.getElementById('studiesList').style.display = 'flex';
+                    document.getElementById('paginationSection').style.display = 'block';
+
+                    // Перезагружаем данные исследований ТОЛЬКО ОДИН РАЗ
+                    // Используем флаг чтобы не делать это при каждом polling
+                    if (!window._dataReloaded) {
+                        window._dataReloaded = true;
+                        await loadBatchData();
+                    }
+                }
+            } else {
+                // Нет задач - показываем все
+                document.getElementById('downloadReportBtn').style.display = 'inline-block';
+                document.getElementById('filtersSection').style.display = 'flex';
+                document.getElementById('studiesList').style.display = 'flex';
+                document.getElementById('paginationSection').style.display = 'block';
+            }
+
+        } catch (error) {
+            console.log('Could not load tasks status:', error);
+            // При ошибке показываем все
+            document.getElementById('downloadReportBtn').style.display = 'inline-block';
+            document.getElementById('filtersSection').style.display = 'flex';
+            document.getElementById('studiesList').style.display = 'flex';
+            document.getElementById('paginationSection').style.display = 'block';
+        }
+    }
+
+    // Обновление информации о времени обработки
+    function updateProcessingTime() {
+        if (!batchData) return;
+
+        // Правильно парсим время - добавляем 'Z' чтобы JavaScript понял что это UTC
+        const startTime = batchData.processing_start_time ?
+            new Date(batchData.processing_start_time + 'Z') : null;
+
+        if (startTime) {
+            let endTime;
+            let statusText;
+
+            if (batchData.processing_end_time) {
+                // Обработка завершена - используем реальное время окончания (тоже добавляем 'Z')
+                endTime = new Date(batchData.processing_end_time + 'Z');
+            } else {
+                // Обработка идет - используем текущее время
+                endTime = new Date();
+            }
+
+            // Вычисляем разность в секундах
+            const duration = Math.floor((endTime - startTime) / 1000);
+
+            const minutes = Math.floor(duration / 60);
+            const seconds = duration % 60;
+            const timeStr = minutes > 0 ? `${minutes} мин ${seconds} сек` : `${seconds} сек`;
+
+            if (batchData.processing_end_time) {
+                statusText = `Завершено за: ${timeStr}`;
+            } else {
+                statusText = `В обработке: ${timeStr}`;
+            }
+
+            // Отображаем под "Детали загрузки"
+            const display = document.getElementById('processingTimeDisplay');
+            display.textContent = statusText;
+            display.style.display = 'block';
+        }
+    }
+
+    // Отмена батча
+    async function cancelBatch() {
+        if (!confirm('Вы уверены, что хотите отменить обработку этого батча?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/v1/studies/batches/${batchId}/cancel`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('Ошибка при отмене батча');
+            }
+
+            const result = await response.json();
+            alert(result.message);
+
+            // Обновляем данные
+            location.reload();
+        } catch (error) {
+            console.error('Error cancelling batch:', error);
+            alert('Ошибка при отмене батча: ' + error.message);
+        }
+    }
+
+    // Отображение статуса задач
+    function renderTasksStatus(status) {
+        // Обновляем бейдж
+        document.getElementById('taskStatusBadge').textContent =
+            `${Math.round(status.progress_percentage)}% завершено`;
+
+        // Показываем/скрываем кнопку отмены
+        if (status.progress_percentage < 100) {
+            document.getElementById('cancelBatchBtn').style.display = 'inline-block';
+        } else {
+            document.getElementById('cancelBatchBtn').style.display = 'none';
+        }
+
+        // Прогресс-бар (убираем полоски для 100%)
+        const progressClass = status.failed_tasks > 0 ? 'bg-warning' :
+                              status.progress_percentage === 100 ? 'bg-success' : '';
+        // Используем rgb(209, 136, 33) вместо rgb(12, 93, 116) для прогресс-бара
+        const progressStyle = status.progress_percentage === 100 ? '' : 'background-color: rgb(209, 136, 33);';
+        const isAnimated = status.progress_percentage < 100;
+
+        document.getElementById('taskProgressBar').innerHTML = `
+            <div class="progress" style="height: 30px;">
+                <div class="progress-bar ${isAnimated ? 'progress-bar-striped progress-bar-animated' : ''} ${progressClass}"
+                     role="progressbar"
+                     style="width: ${status.progress_percentage}%; ${!progressClass ? progressStyle : ''}">
+                    ${Math.round(status.progress_percentage)}%
+                </div>
+            </div>
+            <div class="row mt-3 text-center">
+                <div class="col-md-3">
+                    <small class="text-muted">Всего</small>
+                    <div class="h5">${status.total_tasks}</div>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Ожидают</small>
+                    <div class="h5 text-secondary">${status.pending_tasks}</div>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Успешно</small>
+                    <div class="h5 text-success">${status.success_tasks}</div>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Ошибок</small>
+                    <div class="h5 text-danger">${status.failed_tasks}</div>
+                </div>
+            </div>
+        `;
+
+        // Список задач (показываем только первые 10 или те, что в обработке/с ошибкой)
+        const displayTasks = status.tasks
+            .filter(t => t.status !== 'SUCCESS' || status.tasks.indexOf(t) < 10)
+            .slice(0, 15);
+
+        if (displayTasks.length > 0) {
+            document.getElementById('tasksList').innerHTML = `
+                <div class="table-responsive mt-3">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Файл</th>
+                                <th>Статус</th>
+                                <th>Study ID</th>
+                                <th>Ошибка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${displayTasks.map(task => `
+                                <tr>
+                                    <td><small>${task.filename}</small></td>
+                                    <td>${getTaskStatusBadge(task.status)}</td>
+                                    <td>${task.study_id ? `<a href="/studies/${task.study_id}">${task.study_id}</a>` : '-'}</td>
+                                    <td><small class="text-danger">${task.error_message || '-'}</small></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+    }
+
+    // Получение бейджа статуса задачи
+    function getTaskStatusBadge(status) {
+        const badges = {
+            'PENDING': '<span class="badge bg-secondary">Ожидает</span>',
+            'STARTED': '<span class="badge" style="background-color: rgb(12, 93, 116);"><i class="fas fa-sync-alt fa-spin me-1"></i>Выполняется</span>',
+            'SUCCESS': '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Успешно</span>',
+            'FAILURE': '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Ошибка</span>',
+            'RETRY': '<span class="badge bg-warning"><i class="fas fa-redo me-1"></i>Повтор</span>',
+        };
+        return badges[status] || `<span class="badge bg-secondary">${status}</span>`;
+    }
+
+    // Запуск polling статуса
+    function startStatusPolling() {
+        if (statusPolling) {
+            clearInterval(statusPolling);
+        }
+
+        statusPolling = setInterval(async () => {
+            try {
+                // Обновляем только статус задач
+                await loadTasksStatus();
+
+                // Перезагружаем данные батча для обновления времени
+                const batchResponse = await fetch(`/api/v1/studies/batches`);
+                if (batchResponse.ok) {
+                    const batches = await batchResponse.json();
+                    const updatedBatch = batches.find(b => b.id == batchId);
+                    if (updatedBatch) {
+                        batchData = updatedBatch;
+                    }
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+            }
+        }, 3000);
+    }
+
+    // Остановка polling
+    function stopStatusPolling() {
+        if (statusPolling) {
+            clearInterval(statusPolling);
+            statusPolling = null;
+        }
+    }
+
     // Отображение информации о батче
     function renderBatchInfo() {
+        // Добавляем 3 часа к времени загрузки для правильного отображения
         const uploadDate = new Date(batchData.upload_date);
-        const formattedDate = uploadDate.toLocaleString('ru-RU');
+        const adjustedDate = new Date(uploadDate.getTime() + 3 * 60 * 60 * 1000);
+        const formattedDate = adjustedDate.toLocaleString('ru-RU');
 
         batchInfo.textContent = `Загружено: ${formattedDate}`;
     }
@@ -393,6 +688,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Загружаем данные при загрузке страницы
     loadBatchData();
+
+    // Проверяем статус задач и запускаем polling если нужно
+    loadTasksStatus().then(() => {
+        // Если есть незавершенные задачи, запускаем polling
+        // (только один раз при загрузке страницы)
+        const tasksStatus = document.getElementById('tasksStatus');
+        if (tasksStatus.style.display !== 'none') {
+            startStatusPolling();
+        }
+    });
 });
 </script>
+
+<style>
+/* Стили для темной темы */
+[data-theme="dark"] #tasksStatus .card {
+    background-color: #1a1d20;
+    border-color: #2d3238;
+}
+
+[data-theme="dark"] #tasksStatus .card-header {
+    background-color: #0d6efd !important;
+    border-color: #0d6efd;
+}
+
+[data-theme="dark"] #tasksStatus .table {
+    color: #e9ecef;
+}
+
+[data-theme="dark"] #tasksStatus .table thead {
+    border-color: #2d3238;
+}
+
+[data-theme="dark"] #tasksStatus .table td,
+[data-theme="dark"] #tasksStatus .table th {
+    border-color: #2d3238;
+}
+</style>
 {% endblock %}

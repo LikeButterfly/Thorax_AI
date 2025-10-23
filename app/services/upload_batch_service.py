@@ -173,6 +173,71 @@ class UploadBatchService(BaseService[UploadBatch]):
             logger.error(f"Ошибка при получении статистики батча {batch_id}: {e}")
             return {}
 
+    def set_processing_start(self, batch_id: int) -> bool:
+        """
+        Установить время начала обработки батча
+
+        Args:
+            batch_id: ID батча
+
+        Returns:
+            bool: True если успешно
+        """
+        try:
+            success = self.update(batch_id, processing_start_time=get_current_time())
+            if success:
+                self.commit()
+                logger.info(f"Установлено время начала обработки батча {batch_id}")
+            return success is not None
+        except Exception as e:
+            logger.error(f"Ошибка при установке времени начала обработки батча {batch_id}: {e}")
+            self.rollback()
+            return False
+
+    def set_processing_end(self, batch_id: int) -> bool:
+        """
+        Установить время окончания обработки батча
+
+        Args:
+            batch_id: ID батча
+
+        Returns:
+            bool: True если успешно
+        """
+        try:
+            success = self.update(batch_id, processing_end_time=get_current_time())
+            if success:
+                self.commit()
+                logger.info(f"Установлено время окончания обработки батча {batch_id}")
+            return success is not None
+        except Exception as e:
+            logger.error(f"Ошибка при установке времени окончания обработки батча {batch_id}: {e}")
+            self.rollback()
+            return False
+
+    def cancel_batch(self, batch_id: int) -> bool:
+        """
+        Отменить батч
+
+        Args:
+            batch_id: ID батча
+
+        Returns:
+            bool: True если успешно
+        """
+        try:
+            success = self.update(
+                batch_id, is_cancelled=True, processing_end_time=get_current_time()
+            )
+            if success:
+                self.commit()
+                logger.info(f"Батч {batch_id} отменен")
+            return success is not None
+        except Exception as e:
+            logger.error(f"Ошибка при отмене батча {batch_id}: {e}")
+            self.rollback()
+            return False
+
     def validate_data(self, data: Dict[str, Any]) -> bool:
         """
         Валидирует данные батча

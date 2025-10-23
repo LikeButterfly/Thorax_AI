@@ -1,6 +1,12 @@
 # -r base.txt
-pytest==8.4.2
-pytest-asyncio==1.2.0
+
+# ML Core dependencies
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+
+# pytest==8.4.2
+# pytest-asyncio==1.2.0
 
 pre-commit==4.3.0
 ruff==0.13.1

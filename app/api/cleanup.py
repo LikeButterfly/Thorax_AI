@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.models.study import CeleryTaskStatus
 from app.services.active_analysis_service import ActiveAnalysisService
 from app.services.mass_cleanup_service import MassCleanupService
 
@@ -20,11 +21,22 @@ router = APIRouter(prefix="/cleanup", tags=["cleanup"])
 @router.get("/analyses")
 async def get_active_analyses(db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
-    Проверяет активные загрузки
+    Проверяет активные загрузки (синхронные и асинхронные)
     """
     try:
+        # Проверяем синхронные загрузки (старый метод)
         active_analysis_service = ActiveAnalysisService(db)
-        has_active = active_analysis_service.has_active_analyses()
+        has_sync_active = active_analysis_service.has_active_analyses()
+
+        # Ищем активные задачи
+        active_tasks = (
+            db.query(CeleryTaskStatus)
+            .filter(CeleryTaskStatus.status.in_(["PENDING", "STARTED"]))
+            .count()
+        )
+
+        has_async_active = active_tasks > 0
+        has_active = has_sync_active or has_async_active
 
         return {"has_active_analyses": has_active}
 

@@ -32,7 +32,7 @@ async def health_check() -> Dict[str, Any]:
     """
     # Проверяем доступность ML сервиса
     ml_client = MLClientService()
-    ml_service_available = await ml_client.check_ml_service_health()
+    ml_service_health = await ml_client.check_ml_service_health()
 
     return {
         "status": "healthy",
@@ -40,7 +40,7 @@ async def health_check() -> Dict[str, Any]:
         "version": settings.app_version,
         "environment": settings.environment,
         "timestamp": get_current_time().isoformat(),
-        "ml_service_available": ml_service_available,
+        "ml_service": ml_service_health,
     }
 
 
@@ -104,6 +104,38 @@ async def detailed_health_check(db: Session = Depends(get_db)) -> Dict[str, Any]
             "message": f"File system error: {str(e)}",
         }
         health_status["status"] = "unhealthy"
+
+    # Проверка ML сервиса
+    try:
+        ml_client = MLClientService()
+        ml_service_health = await ml_client.check_ml_service_health()
+
+        if ml_service_health["available"]:
+            health_status["components"]["ml_service"] = {
+                "status": "healthy",
+                "message": "ML service is available",
+                "model_loaded": ml_service_health["model_loaded"],
+                "device": ml_service_health["device"],
+            }
+        else:
+            health_status["components"]["ml_service"] = {
+                "status": "unhealthy",
+                "message": f"ML service unavailable: {ml_service_health['status']}",
+                "model_loaded": False,
+                "device": "unknown",
+            }
+
+            logger.warning(f"ML service is unavailable: {ml_service_health['status']}")
+    except Exception as e:
+        logger.error(f"ML service health check failed: {e}")
+        health_status["components"]["ml_service"] = {
+            "status": "unhealthy",
+            "message": f"ML service check failed: {str(e)}",
+            "model_loaded": False,
+            "device": "unknown",
+        }
+
+        logger.warning(f"ML service health check failed: {str(e)}")
 
     # Если есть проблемы, возвращаем ошибку
     if health_status["status"] != "healthy":

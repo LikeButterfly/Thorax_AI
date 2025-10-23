@@ -14,11 +14,10 @@ import pandas as pd
 import timm
 import torch
 import torch.nn.functional as F
+from core.config import settings
 from PIL import Image
 from statsmodels.stats.proportion import proportion_confint
 from torchvision import transforms
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +32,9 @@ class MLModelService:
         self.class_names = ["normal", "pathologies"]
         self._model_loaded = False
 
-        # Константы для анализа патологий
-        self.THRESHOLD_FRAME_PROB = 0.6  # порог вероятности патологии на кадре
-        self.THRESHOLD_FRAC = 0.12  # минимальная доля положительных кадров для исследования
+        # Константы для анализа патологий из настроек
+        self.THRESHOLD_FRAME_PROB = settings.threshold_frame_prob
+        self.THRESHOLD_FRAC = settings.threshold_frac
 
     async def load_model(self):
         """Асинхронная загрузка модели"""
@@ -57,11 +56,11 @@ class MLModelService:
         """Синхронная загрузка модели"""
         # Создаем модель
         self.model = timm.create_model(
-            settings.MODEL_NAME, pretrained=False, num_classes=settings.NUM_CLASSES
+            settings.model_name, pretrained=False, num_classes=settings.num_classes
         )
 
         # Загружаем веса
-        model_path = Path(settings.MODEL_PATH)
+        model_path = Path(settings.model_path)
         if not model_path.exists():
             raise FileNotFoundError(f"Файл модели не найден: {model_path}")
 
@@ -81,31 +80,39 @@ class MLModelService:
             ]
         )
 
-        logger.info(f"Модель {settings.MODEL_NAME} загружена с {settings.NUM_CLASSES} классами")
+        logger.info(f"Модель {settings.model_name} загружена с {settings.num_classes} классами")
 
-    async def predict_image(self, image_path: str) -> Dict[str, Any]:
+    async def predict_batch(self, image_paths: list) -> list:
         """
-        Предсказание для одного изображения
+        Батчевое предсказание для нескольких изображений
 
         Args:
-            image_path: Путь к изображению
+            image_paths: Список путей к изображениям
 
         Returns:
-            Словарь с результатами предсказания
+            Список результатов предсказаний
         """
         if not self._model_loaded:
             raise RuntimeError("Модель не загружена")
 
-        try:
-            # Загружаем и обрабатываем изображение
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self._predict_image_sync, image_path)
+        results = []
+        for image_path in image_paths:
+            try:
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, self._predict_image_sync, image_path)
+                results.append(result)
+            except Exception as e:
+                logger.error(f"Ошибка обработки {image_path}: {str(e)}")
 
-            return result
+                results.append(
+                    {
+                        "image_path": image_path,
+                        "error": str(e),
+                        "pathology_probability": 0.0,  # FIXME
+                    }
+                )
 
-        except Exception as e:
-            logger.error(f"Ошибка предсказания для {image_path}: {str(e)}")
-            raise
+        return results
 
     def _predict_image_sync(self, image_path: str) -> Dict[str, Any]:
         """Синхронное предсказание изображения"""
@@ -134,37 +141,6 @@ class MLModelService:
                 "normal_probability": float(probs[0]),
                 "probabilities": {"normal": float(probs[0]), "pathologies": float(probs[1])},  # type: ignore  # noqa E501
             }
-
-    async def predict_batch(self, image_paths: list) -> list:
-        """
-        Батчевое предсказание для нескольких изображений
-
-        Args:
-            image_paths: Список путей к изображениям
-
-        Returns:
-            Список результатов предсказаний
-        """
-        if not self._model_loaded:
-            raise RuntimeError("Модель не загружена")
-
-        results = []
-        for image_path in image_paths:
-            try:
-                result = await self.predict_image(image_path)
-                results.append(result)
-            except Exception as e:
-                logger.error(f"Ошибка обработки {image_path}: {str(e)}")
-                # Добавляем результат с ошибкой
-                results.append(
-                    {
-                        "image_path": image_path,
-                        "error": str(e),
-                        "pathology_probability": 0.0,
-                    }
-                )
-
-        return results
 
     def extract_study_id(self, filename: str) -> str:
         """
@@ -285,3 +261,17 @@ class MLModelService:
         except Exception as e:
             logger.error(f"Ошибка анализа исследования: {str(e)}")
             return {"error": str(e)}
+
+    async def cleanup(self):
+        """Очистка ресурсов модели"""
+        if self.model is not None:
+            # Очищаем модель из памяти
+            del self.model
+            self.model = None
+
+            # Очищаем кэш CUDA если используется
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
+
+            self._model_loaded = False
+            logger.info("ML модель очищена из памяти")
